@@ -19,26 +19,32 @@ def generate_random_string(length):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
-# Get temp email from TempMail.dev
+# Get temp email from Mail.tm
 def get_temp_email():
     try:
-        response = requests.get("https://api.tempmail.dev/request/mailbox")
-        if response.status_code == 200:
-            return response.json()["mailbox"]
+        session = requests.Session()
+        domain = session.get("https://api.mail.tm/domains").json()["hydra:member"][0]["domain"]
+        address = generate_random_string(10) + "@" + domain
+
+        payload = {"address": address, "password": "TempPass123!"}
+        response = session.post("https://api.mail.tm/accounts", json=payload)
+        
+        if response.status_code == 201:
+            return address, session
     except Exception as e:
         print(f"[×] Error getting temp email: {e}")
-    return None
+    return None, None
 
 # Fetch verification email
-def get_verification_code(email):
+def get_verification_code(session):
     for _ in range(15):  # Retry 15 times
         try:
-            inbox_url = f"https://api.tempmail.dev/request/mailbox/{email}/messages"
-            response = requests.get(inbox_url)
-            if response.status_code == 200 and response.json():
-                for msg in response.json():
-                    if "Facebook" in msg["from"]:
-                        return extract_verification_code(msg["body"])
+            response = session.get("https://api.mail.tm/messages")
+            if response.status_code == 200 and response.json()["hydra:totalItems"] > 0:
+                for msg in response.json()["hydra:member"]:
+                    if "Facebook" in msg["from"]["address"]:
+                        email_body = session.get(f"https://api.mail.tm/messages/{msg['id']}").json()["text"]
+                        return extract_verification_code(email_body)
         except Exception as e:
             print(f"[×] Error fetching email: {e}")
         time.sleep(10)  # Wait before retrying
@@ -60,9 +66,9 @@ def get_facebook_cookies():
     return cookies.get("datr", "N/A")
 
 # Register Facebook account
-def register_facebook_account(email, password, first_name, last_name, birthday):
+def register_facebook_account(email, password, first_name, last_name, birthday, session):
     datr_cookie = get_facebook_cookies()
-    verification_code = get_verification_code(email)
+    verification_code = get_verification_code(session)
 
     print(f'''
 -----------GENERATED-----------
@@ -82,7 +88,7 @@ if __name__ == "__main__":
     num_accounts = int(input("[+] How Many Accounts You Want: "))
 
     for _ in range(num_accounts):
-        email = get_temp_email()
+        email, session = get_temp_email()
         if not email:
             print("[×] Failed to get a temp email.")
             continue
@@ -92,6 +98,6 @@ if __name__ == "__main__":
         last_name = fake.last_name()
         birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
 
-        register_facebook_account(email, password, first_name, last_name, birthday)
+        register_facebook_account(email, password, first_name, last_name, birthday, session)
 
 print('\x1b[38;5;208m⇼'*60)
