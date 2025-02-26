@@ -1,5 +1,3 @@
-import threading
-from queue import Queue
 import requests
 import random
 import string
@@ -12,55 +10,43 @@ from faker import Faker
 print(f"""
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓           
 > › Github :- @jatintiwari0 
-> › By      :- JATIN TIWARI00
+> › By      :- JATIN TIWARI
 > › Proxy Support Added by @coopers-lab
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                """)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+""")
 print('\x1b[38;5;208m⇼'*60)
 
-# Generate a random string
-def generate_random_string(length):
-    letters_and_digits = string.ascii_letters + string.digits
-    return ''.join(random.choice(letters_and_digits) for i in range(length))
+# Generate a random username for 1secmail
+def generate_email():
+    username = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    domain = random.choice(["1secmail.com", "1secmail.org", "1secmail.net"])
+    return f"{username}@{domain}", username, domain
 
-# Fetch a temporary email from TempMail.dev
-def get_temp_email():
-    url = "https://api.tempmail.dev/request/mailbox"
-    try:
-        response = requests.post(url)
-        if response.status_code == 201:
-            email_data = response.json()
-            return email_data['email'], email_data['token']
-        else:
-            print(f'[×] Error fetching temp email: {response.text}')
-            return None, None
-    except Exception as e:
-        print(f'[×] Error: {e}')
-        return None, None
-
-# Check inbox for verification code
-def get_verification_code(email, token):
-    url = f"https://api.tempmail.dev/request/mailbox/{token}"
-    for _ in range(15):  # Retry for 15 times
+# Fetch verification code from 1secmail inbox
+def get_verification_code(username, domain):
+    base_url = f"https://www.1secmail.com/api/v1/?action=getMessages&login={username}&domain={domain}"
+    
+    for _ in range(15):  # Retry up to 15 times
         try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                emails = response.json().get('emails', [])
-                for mail in emails:
-                    if "Facebook" in mail['from']:
-                        # Extract verification code
-                        return extract_code(mail['subject'])
+            response = requests.get(base_url).json()
+            if response:
+                for mail in response:
+                    mail_id = mail["id"]
+                    mail_details = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={username}&domain={domain}&id={mail_id}").json()
+                    if "Facebook" in mail_details["from"]:
+                        return extract_code(mail_details["subject"])
             print("[×] Inbox is empty. Retrying...")
             time.sleep(5)  # Wait before retrying
         except Exception as e:
             print(f'[×] Error fetching email: {e}')
+    
     return None  # No code found
 
-# Extract verification code from email subject
+# Extract verification code from subject
 def extract_code(subject):
-    code = ''.join(filter(str.isdigit, subject))
-    return code if code else None
+    return ''.join(filter(str.isdigit, subject)) or "N/A"
 
-# Create a Facebook account
+# Register a Facebook account and get the `datr` cookie
 def register_facebook_account(email, password, first_name, last_name, birthday):
     api_key = '882a8490361da98702bf97a021ddc14d'
     secret = '62f8ce9f74b12f84c123cc23437a4a32'
@@ -81,40 +67,42 @@ def register_facebook_account(email, password, first_name, last_name, birthday):
         'locale': 'en_US',
         'method': 'user.register',
         'password': password,
-        'reg_instance': generate_random_string(32),
+        'reg_instance': ''.join(random.choices(string.ascii_letters + string.digits, k=32)),
         'return_multiple_errors': True
     }
 
     sorted_req = sorted(req.items(), key=lambda x: x[0])
     sig = ''.join(f'{k}={v}' for k, v in sorted_req)
-    ensig = hashlib.md5((sig + secret).encode()).hexdigest()
-    req['sig'] = ensig
+    req['sig'] = hashlib.md5((sig + secret).encode()).hexdigest()
 
     api_url = 'https://b-api.facebook.com/method/user.register'
-    reg = requests.post(api_url, data=req).json()
+    session = requests.Session()
+    reg = session.post(api_url, data=req)
+
+    if 'new_user_id' in reg.json():
+        user_id = reg.json()['new_user_id']
+        datr_cookie = session.cookies.get_dict().get('datr', 'N/A')  # Extract 'datr' cookie
+        return user_id, datr_cookie
     
-    if 'new_user_id' in reg:
-        return reg['new_user_id'], reg['session_info']['access_token']
     return None, None
 
 # Main execution
 fake = Faker()
-email, token = get_temp_email()
-if email:
-    print(f"[+] Temporary email generated: {email}")
-    
-    password = fake.password()
-    birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
-    first_name = fake.first_name()
-    last_name = fake.last_name()
+email, username, domain = generate_email()
+print(f"[+] Temporary email generated: {email}")
 
-    user_id, fb_token = register_facebook_account(email, password, first_name, last_name, birthday)
+password = fake.password()
+birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
+first_name = fake.first_name()
+last_name = fake.last_name()
 
-    verification_code = get_verification_code(email, token)
-    if not verification_code:
-        verification_code = "N/A"
+user_id, datr_cookie = register_facebook_account(email, password, first_name, last_name, birthday)
 
-    print(f'''
+verification_code = get_verification_code(username, domain)
+if not verification_code:
+    verification_code = "N/A"
+
+print(f'''
 -----------GENERATED-----------
 EMAIL     : {email}
 ID        : {user_id if user_id else "N/A"}
@@ -124,8 +112,6 @@ BIRTHDAY  : {birthday}
 GENDER    : {random.choice(["M", "F"])}
 VERIFICATION CODE: {verification_code}
 -----------GENERATED-----------
-Token     : {fb_token if fb_token else "N/A"}
+DATR Cookie: {datr_cookie if datr_cookie else "N/A"}
 -----------GENERATED-----------
 ''')
-else:
-    print("[×] Failed to get a temp email.")
