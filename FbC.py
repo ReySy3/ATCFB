@@ -53,14 +53,32 @@ def get_facebook_cookies():
     cookies = session.cookies.get_dict()
     return cookies.get("datr", "N/A")
 
-# Register Facebook account
+# Simulate Facebook registration
 def register_facebook_account(email, password, first_name, last_name, birthday, username):
     datr_cookie = get_facebook_cookies()
     verification_code = get_verification_code(email, username)
+    
+    # Simulating Facebook Registration Request
+    fb_register_url = "https://www.facebook.com/api/register"  # Example URL (not real)
+    payload = {
+        "email": email,
+        "password": password,
+        "first_name": first_name,
+        "last_name": last_name,
+        "birthday": birthday,
+        "verification_code": verification_code
+    }
+    
+    response = requests.post(fb_register_url, data=payload)  # Simulated request
+    try:
+        user_id = response.json().get("id", "N/A")  # Extract user ID
+    except:
+        user_id = "N/A"
 
     print(f'''
 -----------GENERATED-----------
 EMAIL     : {email}
+ID        : {user_id}
 PASSWORD  : {password}
 NAME      : {first_name} {last_name}
 BIRTHDAY  : {birthday}
