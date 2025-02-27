@@ -1,114 +1,111 @@
 import requests
 import time
-import json
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import random
+import re
 
-# === Configuration ===
-chrome_driver_path = "/path/to/chromedriver"  # Update this with your actual path
-FACEBOOK_SIGNUP_URL = "https://www.facebook.com/r.php"
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#    LOGO
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+logo = """\033[92m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+> › Github :- @Xio
+> › By      :- Rey Estacio
+> › Proxy Support Added by @coopers-lab
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+\033[0m"""
 
-# === 1secmail API ===
-TEMPMAIL_API = "https://www.1secmail.com/api/v1/"
+print(logo)
 
-# === Generate Temporary Email ===
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#    CONFIG
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MAILTM_API = "https://api.mail.tm"
+
 def get_temp_email():
-    """Generate a temporary email from 1secmail."""
-    try:
-        response = requests.get(f"{TEMPMAIL_API}?action=genRandomMailbox")
-        email = response.json()[0]
-        print(f"[+] Temporary email generated: {email}")
-        return email
-    except Exception as e:
-        print(f"[×] Error generating temp email: {e}")
-        return None
+    """Get a new temporary email from mail.tm."""
+    response = requests.post(f"{MAILTM_API}/accounts", json={})
+    if response.status_code == 201:
+        data = response.json()
+        return data["address"], data["id"], data["password"]
+    else:
+        print("[×] Error generating temp email.")
+        return None, None, None
 
-# === Wait for Verification Email ===
-def wait_for_verification_email(email):
-    """Poll the email inbox for the Facebook verification code."""
-    username, domain = email.split('@')
-    inbox_url = f"{TEMPMAIL_API}?action=getMessages&login={username}&domain={domain}"
+def get_inbox_messages(email_id, token):
+    """Fetch messages from the inbox."""
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f"{MAILTM_API}/messages", headers=headers)
+    if response.status_code == 200:
+        messages = response.json()["hydra:member"]
+        return messages
+    return []
 
-    print("[+] Waiting for Facebook verification email...")
-
-    for _ in range(30):  # Retry up to 30 times (every 5 seconds)
-        time.sleep(5)
-        try:
-            inbox = requests.get(inbox_url).json()
-            if inbox:
-                mail_id = inbox[0]["id"]
-                print(f"[+] Email received! ID: {mail_id}")
-                mail_url = f"{TEMPMAIL_API}?action=readMessage&login={username}&domain={domain}&id={mail_id}"
-                mail_content = requests.get(mail_url).json()
-                return extract_verification_code(mail_content["body"])
-        except:
-            pass
-        print("[×] Inbox is empty. Retrying...")
-
-    print("[×] No verification email received within time limit.")
+def get_verification_code(email_id, token):
+    """Retrieve the verification code from the latest email."""
+    for _ in range(10):  # Retry for 10 seconds
+        messages = get_inbox_messages(email_id, token)
+        if messages:
+            for msg in messages:
+                if "Your Verification Code" in msg["subject"]:
+                    email_response = requests.get(f"{MAILTM_API}/messages/{msg['id']}", headers={"Authorization": f"Bearer {token}"})
+                    if email_response.status_code == 200:
+                        return extract_code(email_response.json()["text"])
+        time.sleep(2)
     return None
 
-# === Extract Verification Code ===
-def extract_verification_code(email_body):
-    """Extract verification code from Facebook email."""
-    import re
-    match = re.search(r"\b\d{5,6}\b", email_body)
+def extract_code(text):
+    """Extracts a 6-digit verification code from text."""
+    match = re.search(r"\b\d{6}\b", text)
     return match.group(0) if match else None
 
-# === Fetch `datr` Cookie using Selenium ===
-def get_datr_cookie():
-    """Retrieve the `datr` cookie after accessing Facebook."""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in headless mode
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+def register_facebook_account(email, password, first_name, last_name, birthday, proxy=None):
+    """Simulate Facebook registration (You need to complete this part)."""
+    session = requests.Session()
+    
+    # Simulated Facebook registration request
+    print(f"[+] Registering Facebook account: {email}")
+    
+    # Simulate getting DATR Cookie (Replace this with real scraping)
+    cookies = session.cookies.get_dict()
+    datr_cookie = cookies.get("datr", "N/A")
+    
+    return {"email": email, "password": password, "name": f"{first_name} {last_name}", "birthday": birthday, "datr": datr_cookie}
 
-    service = Service(chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-
-    try:
-        print("[+] Opening Facebook login page...")
-        driver.get("https://www.facebook.com/")
-        time.sleep(5)  # Allow time for cookies to load
-
-        cookies = driver.get_cookies()
-        datr_cookie = next((cookie['value'] for cookie in cookies if cookie['name'] == 'datr'), None)
-
-        driver.quit()
-        return datr_cookie if datr_cookie else "N/A"
-
-    except Exception as e:
-        print(f"[×] Error fetching `datr` cookie: {e}")
-        driver.quit()
-        return "N/A"
-
-# === Facebook Registration Automation ===
-def register_facebook_account():
-    """Simulate Facebook account registration (Manual completion required)."""
-    email = get_temp_email()
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#    MAIN FUNCTION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def main():
+    print("\n[+] How Many Accounts You Want: 1")
+    
+    email, email_id, password = get_temp_email()
     if not email:
         print("[×] Failed to get a temp email.")
         return
-
-    # User needs to manually register using the temp email
-    print(f"[!] Go to {FACEBOOK_SIGNUP_URL} and register manually using this email:")
-    print(f"    EMAIL: {email}")
-
-    # Wait for verification email
-    verification_code = wait_for_verification_email(email)
     
-    # Fetch the `datr` cookie
-    datr_cookie = get_datr_cookie()
+    first_name = random.choice(["John", "Alice", "Michael", "Emma"])
+    last_name = random.choice(["Smith", "Johnson", "Brown", "Williams"])
+    birthday = f"{random.randint(1980, 2005)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
+    
+    print(f"[+] Temporary Email: {email}")
+    print("[+] Waiting for verification email...")
+    
+    # Simulate Facebook registration
+    fb_data = register_facebook_account(email, password, first_name, last_name, birthday)
+    
+    token = "your_mailtm_token_here"  # Replace with real token
+    verification_code = get_verification_code(email_id, token)
+    
+    print("\n-----------GENERATED-----------")
+    print(f"EMAIL     : {fb_data['email']}")
+    print(f"ID        : {email_id or 'N/A'}")
+    print(f"PASSWORD  : {fb_data['password']}")
+    print(f"NAME      : {fb_data['name']}")
+    print(f"BIRTHDAY  : {fb_data['birthday']}")
+    print(f"GENDER    : M")
+    print(f"VERIFICATION CODE: {verification_code or 'N/A'}")
+    print("-----------GENERATED-----------")
+    print(f"datr=     : {fb_data['datr']}")
+    print("-----------GENERATED-----------")
 
-    # Print results
-    print("\n----------- GENERATED -----------")
-    print(f"EMAIL     : {email}")
-    print(f"PASSWORD  : [SET MANUALLY]")
-    print(f"VERIFICATION CODE: {verification_code if verification_code else 'N/A'}")
-    print(f"datr=     : {datr_cookie}")
-    print("--------------------------------\n")
-
-# === Run the script ===
 if __name__ == "__main__":
-    register_facebook_account()
+    main()
