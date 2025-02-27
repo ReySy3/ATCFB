@@ -20,57 +20,49 @@ print('\x1b[38;5;22m•'*60)
 print('\x1b[38;5;22m•'*60)
 print('\x1b[38;5;208m⇼'*60)
 
-# Helper function to generate random string
+# Temp-Mail API Endpoint
+TEMP_MAIL_API = "https://api.tempmail.lol"
+
+# Helper function to generate a random string
 def generate_random_string(length):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
-# Get available mail.tm domains
-def get_mail_domains(proxy=None):
-    url = "https://api.mail.tm/domains"
+# Function to generate a Temp-Mail email
+def create_temp_mail(proxy=None):
     try:
-        response = requests.get(url, proxies=proxy, timeout=5)
+        response = requests.get(f"{TEMP_MAIL_API}/generate", proxies=proxy, timeout=5)
         if response.status_code == 200:
-            return response.json().get('hydra:member', [])
+            data = response.json()
+            email = data.get("address")
+            token = data.get("token")
+            return email, token
         else:
-            print(f'[×] Mail.tm Error: {response.text}')
-            return None
+            print(f'[×] Temp-Mail Error: {response.text}')
+            return None, None
     except Exception as e:
-        print(f'[×] Mail.tm Connection Error: {e}')
+        print(f'[×] Temp-Mail Connection Error: {e}')
+        return None, None
+
+# Function to get verification code from Temp-Mail inbox
+def get_verification_code(token, proxy=None):
+    try:
+        url = f"{TEMP_MAIL_API}/inbox?token={token}"
+        for _ in range(10):  # Retry up to 10 times
+            response = requests.get(url, proxies=proxy, timeout=5)
+            if response.status_code == 200:
+                messages = response.json().get("emails", [])
+                if messages:
+                    for message in messages:
+                        if "code" in message["subject"]:
+                            return message["subject"]
+                time.sleep(3)  # Wait before retrying
+        return None
+    except Exception as e:
+        print(f'[×] Email Check Error: {e}')
         return None
 
-# Create a temporary email account using Mail.tm
-def create_mail_tm_account(proxy=None):
-    fake = Faker()
-    mail_domains = get_mail_domains(proxy)
-    
-    if not mail_domains:
-        print("[×] No available email domains.")
-        return None, None, None, None, None
-
-    domain = random.choice(mail_domains)['domain']
-    username = generate_random_string(10)
-    password = fake.password()
-    birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
-    first_name = fake.first_name()
-    last_name = fake.last_name()
-
-    url = "https://api.mail.tm/accounts"
-    headers = {"Content-Type": "application/json"}
-    data = {"address": f"{username}@{domain}", "password": password}       
-
-    try:
-        response = requests.post(url, headers=headers, json=data, proxies=proxy, timeout=5)
-        if response.status_code == 201:
-            return f"{username}@{domain}", password, first_name, last_name, birthday
-        else:
-            print(f'[×] Email Creation Error: {response.text}')
-            return None, None, None, None, None
-    except Exception as e:
-        print(f'[×] Email Request Error: {e}')
-        return None, None, None, None, None
-
-# Register a Facebook account
+# Function to register a Facebook account
 def register_facebook_account(email, password, first_name, last_name, birthday, proxy=None):
     api_key = '882a8490361da98702bf97a021ddc14d'
     secret = '62f8ce9f74b12f84c123cc23437a4a32'
@@ -143,7 +135,7 @@ def test_proxy(proxy, q, valid_proxies):
 
 def test_proxy_helper(proxy):
     try:
-        response = requests.get('https://api.mail.tm', proxies=proxy, timeout=5)
+        response = requests.get(TEMP_MAIL_API, proxies=proxy, timeout=5)
         return response.status_code == 200
     except:
         return False
@@ -185,8 +177,19 @@ else:
     
     for _ in range(num_accounts):
         proxy = random.choice(working_proxies)
-        email, password, first_name, last_name, birthday = create_mail_tm_account(proxy)
-        if email and password and first_name and last_name and birthday:
-            register_facebook_account(email, password, first_name, last_name, birthday, proxy)
+        
+        # Generate a temporary email
+        email, token = create_temp_mail(proxy)
+        if not email or not token:
+            continue
+        
+        fake = Faker()
+        password = fake.password()
+        first_name = fake.first_name()
+        last_name = fake.last_name()
+        birthday = fake.date_of_birth(minimum_age=18, maximum_age=45)
+        
+        # Register Facebook account
+        register_facebook_account(email, password, first_name, last_name, birthday, proxy)
 
 print('\x1b[38;5;208m⇼'*60)
