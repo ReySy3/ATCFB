@@ -1,22 +1,38 @@
 import requests
 import time
+import random
+import string
 
 MAILTM_API = "https://api.mail.tm"
 
-# Step 1: Generate a Random Email
+# Step 1: Get Available Domains
+def get_domain():
+    response = requests.get(f"{MAILTM_API}/domains").json()
+    if "hydra:member" in response and response["hydra:member"]:
+        return response["hydra:member"][0]["domain"]  # Use the first available domain
+    return None
+
+# Step 2: Generate Random Email
 def get_temp_email():
     session = requests.Session()
+    domain = get_domain()
     
-    # Generate a random email
-    email_data = session.post(f"{MAILTM_API}/accounts", json={"address": "", "password": "randompass"}).json()
+    if not domain:
+        print("[×] No available domain found.")
+        return None, None, None
+    
+    random_email = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10)) + f"@{domain}"
+    password = "randompass"
+    
+    email_data = session.post(f"{MAILTM_API}/accounts", json={"address": random_email, "password": password}).json()
     if "id" not in email_data:
         print("[×] Error generating temp email.")
         return None, None, None
     
-    email, password, email_id = email_data["address"], "randompass", email_data["id"]
+    email, email_id = email_data["address"], email_data["id"]
     print(f"[+] Temp Email Created: {email}")
     
-    # Step 2: Get Authentication Token
+    # Step 3: Get Authentication Token
     token_data = session.post(f"{MAILTM_API}/token", json={"address": email, "password": password}).json()
     if "token" not in token_data:
         print("[×] Failed to authenticate with mail.tm")
@@ -27,7 +43,7 @@ def get_temp_email():
     
     return email, token, email_id
 
-# Step 3: Wait for Verification Email
+# Step 4: Wait for Verification Email
 def wait_for_verification_email(email_id, token):
     headers = {"Authorization": f"Bearer {token}"}
     
@@ -37,10 +53,10 @@ def wait_for_verification_email(email_id, token):
         if inbox.get("hydra:member"):
             for msg in inbox["hydra:member"]:
                 email_subject = msg.get("subject", "No Subject")
-                email_id = msg["id"]
+                message_id = msg["id"]
                 
                 # Fetch Email Content
-                email_content = requests.get(f"{MAILTM_API}/messages/{email_id}", headers=headers).json()
+                email_content = requests.get(f"{MAILTM_API}/messages/{message_id}", headers=headers).json()
                 verification_code = email_content.get("text", "N/A")
                 
                 print(f"[+] Verification Email Found: {email_subject}")
