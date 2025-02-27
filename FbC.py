@@ -1,111 +1,58 @@
 import requests
 import time
-import random
-import re
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#    LOGO
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-logo = """\033[92m
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-> › Github :- @Xio
-> › By      :- Rey Estacio
-> › Proxy Support Added by @coopers-lab
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-\033[0m"""
-
-print(logo)
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#    CONFIG
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MAILTM_API = "https://api.mail.tm"
 
+# Step 1: Generate a Random Email
 def get_temp_email():
-    """Get a new temporary email from mail.tm."""
-    response = requests.post(f"{MAILTM_API}/accounts", json={})
-    if response.status_code == 201:
-        data = response.json()
-        return data["address"], data["id"], data["password"]
-    else:
-        print("[×] Error generating temp email.")
-        return None, None, None
-
-def get_inbox_messages(email_id, token):
-    """Fetch messages from the inbox."""
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(f"{MAILTM_API}/messages", headers=headers)
-    if response.status_code == 200:
-        messages = response.json()["hydra:member"]
-        return messages
-    return []
-
-def get_verification_code(email_id, token):
-    """Retrieve the verification code from the latest email."""
-    for _ in range(10):  # Retry for 10 seconds
-        messages = get_inbox_messages(email_id, token)
-        if messages:
-            for msg in messages:
-                if "Your Verification Code" in msg["subject"]:
-                    email_response = requests.get(f"{MAILTM_API}/messages/{msg['id']}", headers={"Authorization": f"Bearer {token}"})
-                    if email_response.status_code == 200:
-                        return extract_code(email_response.json()["text"])
-        time.sleep(2)
-    return None
-
-def extract_code(text):
-    """Extracts a 6-digit verification code from text."""
-    match = re.search(r"\b\d{6}\b", text)
-    return match.group(0) if match else None
-
-def register_facebook_account(email, password, first_name, last_name, birthday, proxy=None):
-    """Simulate Facebook registration (You need to complete this part)."""
     session = requests.Session()
     
-    # Simulated Facebook registration request
-    print(f"[+] Registering Facebook account: {email}")
+    # Generate a random email
+    email_data = session.post(f"{MAILTM_API}/accounts", json={"address": "", "password": "randompass"}).json()
+    if "id" not in email_data:
+        print("[×] Error generating temp email.")
+        return None, None, None
     
-    # Simulate getting DATR Cookie (Replace this with real scraping)
-    cookies = session.cookies.get_dict()
-    datr_cookie = cookies.get("datr", "N/A")
+    email, password, email_id = email_data["address"], "randompass", email_data["id"]
+    print(f"[+] Temp Email Created: {email}")
     
-    return {"email": email, "password": password, "name": f"{first_name} {last_name}", "birthday": birthday, "datr": datr_cookie}
+    # Step 2: Get Authentication Token
+    token_data = session.post(f"{MAILTM_API}/token", json={"address": email, "password": password}).json()
+    if "token" not in token_data:
+        print("[×] Failed to authenticate with mail.tm")
+        return None, None, None
+    
+    token = token_data["token"]
+    print("[+] Authentication successful.")
+    
+    return email, token, email_id
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#    MAIN FUNCTION
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def main():
-    print("\n[+] How Many Accounts You Want: 1")
+# Step 3: Wait for Verification Email
+def wait_for_verification_email(email_id, token):
+    headers = {"Authorization": f"Bearer {token}"}
     
-    email, email_id, password = get_temp_email()
-    if not email:
-        print("[×] Failed to get a temp email.")
-        return
+    for _ in range(15):  # Retry for 30 seconds (2s per check)
+        inbox = requests.get(f"{MAILTM_API}/messages", headers=headers).json()
+        
+        if inbox.get("hydra:member"):
+            for msg in inbox["hydra:member"]:
+                email_subject = msg.get("subject", "No Subject")
+                email_id = msg["id"]
+                
+                # Fetch Email Content
+                email_content = requests.get(f"{MAILTM_API}/messages/{email_id}", headers=headers).json()
+                verification_code = email_content.get("text", "N/A")
+                
+                print(f"[+] Verification Email Found: {email_subject}")
+                return verification_code
+        
+        print("[×] Inbox is empty. Retrying...")
+        time.sleep(2)
     
-    first_name = random.choice(["John", "Alice", "Michael", "Emma"])
-    last_name = random.choice(["Smith", "Johnson", "Brown", "Williams"])
-    birthday = f"{random.randint(1980, 2005)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
-    
-    print(f"[+] Temporary Email: {email}")
-    print("[+] Waiting for verification email...")
-    
-    # Simulate Facebook registration
-    fb_data = register_facebook_account(email, password, first_name, last_name, birthday)
-    
-    token = "your_mailtm_token_here"  # Replace with real token
-    verification_code = get_verification_code(email_id, token)
-    
-    print("\n-----------GENERATED-----------")
-    print(f"EMAIL     : {fb_data['email']}")
-    print(f"ID        : {email_id or 'N/A'}")
-    print(f"PASSWORD  : {fb_data['password']}")
-    print(f"NAME      : {fb_data['name']}")
-    print(f"BIRTHDAY  : {fb_data['birthday']}")
-    print(f"GENDER    : M")
-    print(f"VERIFICATION CODE: {verification_code or 'N/A'}")
-    print("-----------GENERATED-----------")
-    print(f"datr=     : {fb_data['datr']}")
-    print("-----------GENERATED-----------")
+    return None
 
-if __name__ == "__main__":
-    main()
+# Run the script
+email, token, email_id = get_temp_email()
+if email:
+    verification_code = wait_for_verification_email(email_id, token)
+    print(f"[+] VERIFICATION CODE: {verification_code if verification_code else 'N/A'}")
