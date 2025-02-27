@@ -49,8 +49,12 @@ def extract_verification_code(email_body):
 def get_facebook_cookies():
     session = requests.Session()
     fb_url = "https://www.facebook.com/"
-    session.get(fb_url)
+    response = session.get(fb_url)
     cookies = session.cookies.get_dict()
+    
+    # Debugging cookies received
+    print(f"[DEBUG] Cookies received: {cookies}")
+
     return cookies.get("datr", "N/A")
 
 # Simulate Facebook registration
